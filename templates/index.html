@@ -1,27 +1,70 @@
 <!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stock Metadata Editor</title><style>
-*{box-sizing:border-box}body{font:16px system-ui,sans-serif;background:#f3f5fa;color:#202638;margin:0}main{max-width:900px;margin:24px auto;padding:24px;background:white;border-radius:18px}h1{font-size:27px;margin:0}p{color:#566277;line-height:1.5}label{display:block;font-weight:600;margin:12px 0 5px}input,textarea,select,button{font:inherit;width:100%;padding:11px;border:1px solid #ccd3e0;border-radius:10px}textarea{min-height:80px}button{background:#244fc8;color:white;font-weight:650;cursor:pointer;border:0;margin-top:12px}button:disabled{opacity:.5}.layout{display:grid;grid-template-columns:230px 1fr;gap:20px;margin-top:20px}.item{background:#f1f4fa;color:#263348;text-align:left;margin:0 0 7px;padding:12px;overflow-wrap:anywhere}.item.active{background:#dce7ff;outline:2px solid #244fc8}.muted{color:#65718a;font-size:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.notice{padding:12px;background:#f0f4fb;border-radius:9px}#status{white-space:pre-wrap;overflow-wrap:anywhere}.option{display:flex;align-items:center;gap:6px;font-weight:400;margin:8px 0;overflow-wrap:anywhere}.option input{width:auto;flex:none}.copybox{border-top:1px solid #ddd;margin-top:16px;padding-top:12px}.soft{background:#e9efff;color:#244fc8;font-size:14px}.copybox .grid{gap:6px}.previewBox{margin:14px 0;padding:12px;border:1px solid #d9dfeb;border-radius:12px;background:#f8faff}.previewBox img{display:block;max-width:100%;max-height:260px;width:auto;height:auto;object-fit:contain;margin:8px auto}.previewBox .muted{text-align:center}.fileName{font-weight:700;overflow-wrap:anywhere}.fileActions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.fileActions button{width:auto;margin-top:0}.danger{background:#b52b36}.readonly input,.readonly textarea{background:#f1f4fa;color:#4a566c}.readonly input:disabled,.readonly textarea:disabled{opacity:1;-webkit-text-fill-color:#4a566c}@media(max-width:650px){main{margin:0;padding:16px;border-radius:0}.layout{grid-template-columns:1fr}.filelist{display:flex;overflow:auto;gap:8px}.item{min-width:150px}.grid{grid-template-columns:1fr}}
-</style></head><body><main><h1>Stock Metadata Editor</h1><p>Зчитування XMP, окремі метадані для кожного EPS, вибіркове копіювання та один CSV для Getty ESP. Працює на iPad.</p><form id="form"><label for="files">Вибери EPS-файли (до 20)</label><input type="file" id="files" accept=".eps,application/postscript" multiple><label for="mode">Режим обробки EPS</label><select id="mode"><option value="preserve">iStock: EPS без змін + CSV з індивідуальними даними</option><option value="update">Adobe Stock / Shutterstock: записати XMP у EPS + CSV</option></select><p class="muted">Режим iStock не змінює жодного байта EPS. В обох режимах CSV містить різні дані для кожного файлу.</p><div class="layout"><div><strong>Ілюстрації</strong><div id="filelist" class="filelist"><p class="muted">Спочатку вибери файли</p></div><section class="copybox"><strong>Копіювання метаданих</strong><p class="muted">Джерело: поточний вибраний файл</p><label class="option"><input type="radio" name="copyMode" value="all"> До всіх інших</label><label class="option"><input type="radio" name="copyMode" value="selected" checked> До вибраних</label><div id="copyTargets"></div><div class="grid"><button type="button" id="selectTargets" class="soft">Позначити всіх</button><button type="button" id="clearTargets" class="soft">Очистити</button></div><label>Поля для копіювання</label><div id="copyFields"></div><label class="option"><input type="checkbox" id="overwrite"> Перезаписувати заповнені поля</label><button type="button" id="copy" class="soft">Копіювати вибрані поля</button></section></div><div><div id="editor" hidden><div id="fileName" class="fileName"></div><div class="previewBox"><strong>Перегляд ілюстрації</strong><p class="muted" id="previewStatus">Готую зображення…</p><img id="previewImage" alt="Попередній перегляд EPS" hidden></div><p class="muted" id="metadataState" role="status"></p><div class="fileActions"><button type="button" id="viewOnly" class="soft" aria-pressed="false">Переглянути метадані</button><button type="button" id="removeFile" class="danger">Видалити файл зі списку</button></div><p class="muted" id="viewHint" hidden>Режим перегляду: дані не можна випадково змінити. Натисни «Редагувати метадані», щоб повернутися до редагування.</p><label>Title</label><input id="title" placeholder="Cute Mochi Characters"><label>Description</label><textarea id="description" placeholder="Cute Japanese mochi vector illustration..."></textarea><label>Keywords (через кому, до 50)</label><textarea id="keywords" placeholder="mochi, japanese, kawaii, dessert"></textarea><div class="muted" id="count">0 / 50</div><div class="grid"><div><label>Author (XMP)</label><input id="author"></div><div><label>Copyright (XMP)</label><input id="copyright"></div><div><label>Country (CSV)</label><input id="country"></div><div><label>Color (CSV)</label><input id="color"></div></div></div></div></div><p class="notice">Імена EPS залишаються оригінальними. У CSV використано колонки твого шаблону Getty: file name, title, description, country, color, keywords.</p><button id="submit" type="submit">Створити ZIP із EPS та одним CSV</button></form><p id="status" role="status" class="muted">Файли тимчасово обробляються на сервері. Не завантажуй конфіденційні матеріали на публічний сайт.</p></main><script>
-const $=id=>document.getElementById(id);let files=[],entries=[],active=0,viewOnly=false,selectedTargets=new Set(),selectedFields=new Set(["title","description","keywords"]);const fields=['title','description','keywords','author','copyright','country','color'];let previewCache=new WeakMap(),previewToken=0;
+*{box-sizing:border-box}body{font:16px system-ui,sans-serif;background:#f3f5fa;color:#202638;margin:0}main{max-width:900px;margin:24px auto;padding:24px;background:white;border-radius:18px}h1{font-size:27px;margin:0}p{color:#566277;line-height:1.5}label{display:block;font-weight:600;margin:12px 0 5px}input,textarea,select,button{font:inherit;width:100%;padding:11px;border:1px solid #ccd3e0;border-radius:10px}textarea{min-height:80px}button{background:#244fc8;color:white;font-weight:650;cursor:pointer;border:0;margin-top:12px}button:disabled{opacity:.5}.layout{display:grid;grid-template-columns:230px 1fr;gap:20px;margin-top:20px}.item{background:#f1f4fa;color:#263348;text-align:left;margin:0 0 7px;padding:12px;overflow-wrap:anywhere}.item.active{background:#dce7ff;outline:2px solid #244fc8}.muted{color:#65718a;font-size:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.notice{padding:12px;background:#f0f4fb;border-radius:9px}#status{white-space:pre-wrap;overflow-wrap:anywhere}.option{display:flex;align-items:center;gap:6px;font-weight:400;margin:8px 0;overflow-wrap:anywhere}.option input{width:auto;flex:none}.copybox{border-top:1px solid #ddd;margin-top:16px;padding-top:12px}.soft{background:#e9efff;color:#244fc8;font-size:14px}.copybox .grid{gap:6px}.previewBox{margin:14px 0;padding:12px;border:1px solid #d9dfeb;border-radius:12px;background:#f8faff}.previewBox img{display:block;max-width:100%;max-height:260px;width:auto;height:auto;object-fit:contain;margin:8px auto}.previewBox .muted{text-align:center}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:9px;margin:12px 0}.gallery button{background:#f2f5fc;color:#273248;margin:0;padding:7px;min-width:0;border:2px solid transparent}.gallery button.active{border-color:#244fc8}.gallery img{width:100%;height:85px;object-fit:contain;background:white;border-radius:6px}.gallery small{display:block;overflow-wrap:anywhere;font-size:11px}.issues{font-size:14px;white-space:pre-wrap;margin:8px 0}.fileName{font-weight:700;overflow-wrap:anywhere}.fileActions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.fileActions button{width:auto;margin-top:0}.danger{background:#b52b36}.readonly input,.readonly textarea{background:#f1f4fa;color:#4a566c}.readonly input:disabled,.readonly textarea:disabled{opacity:1;-webkit-text-fill-color:#4a566c}@media(max-width:650px){main{margin:0;padding:16px;border-radius:0}.layout{grid-template-columns:1fr}.filelist{display:flex;overflow:auto;gap:8px}.item{min-width:150px}.grid{grid-template-columns:1fr}}
+</style></head><body><main><h1>Stock Metadata Editor</h1><p>Зчитування XMP, окремі метадані для кожного EPS, вибіркове копіювання та один CSV для Getty ESP. Працює на iPad.</p><form id="form"><label for="files">Додати EPS до групи (до 20 загалом)</label><input type="file" id="files" accept=".eps,application/postscript" multiple><p class="muted">Можна додавати файли кілька разів. Уже заповнені метадані не зникнуть.</p><label for="mode">Режим обробки EPS</label><select id="mode"><option value="preserve">iStock: EPS без змін + CSV з індивідуальними даними</option><option value="update">Adobe Stock / Shutterstock: записати XMP у EPS + CSV</option></select><p class="muted">Режим iStock не змінює жодного байта EPS. В обох режимах CSV містить різні дані для кожного файлу.</p><div class="layout"><div><strong>Ілюстрації</strong><div id="filelist" class="filelist"><p class="muted">Спочатку вибери файли</p></div><section class="copybox"><strong>Галерея EPS</strong><div id="gallery" class="gallery"></div></section><section class="copybox"><strong>Копіювання метаданих</strong><p class="muted">Джерело: поточний вибраний файл</p><label class="option"><input type="radio" name="copyMode" value="all"> До всіх інших</label><label class="option"><input type="radio" name="copyMode" value="selected" checked> До вибраних</label><div id="copyTargets"></div><div class="grid"><button type="button" id="selectTargets" class="soft">Позначити всіх</button><button type="button" id="clearTargets" class="soft">Очистити</button></div><label>Поля для копіювання</label><div id="copyFields"></div><label class="option"><input type="checkbox" id="overwrite"> Перезаписувати заповнені поля</label><button type="button" id="copy" class="soft">Копіювати вибрані поля</button></section></div><div><div id="editor" hidden><div id="fileName" class="fileName"></div><div class="previewBox"><strong>Перегляд ілюстрації</strong><p class="muted" id="previewStatus">Готую зображення…</p><img id="previewImage" alt="Попередній перегляд EPS" hidden></div><p class="muted" id="metadataState" role="status"></p><div class="fileActions"><button type="button" id="viewOnly" class="soft" aria-pressed="false">Переглянути метадані</button><button type="button" id="removeFile" class="danger">Видалити файл зі списку</button></div><p class="muted" id="viewHint" hidden>Режим перегляду: дані не можна випадково змінити. Натисни «Редагувати метадані», щоб повернутися до редагування.</p><label>Title</label><input id="title" placeholder="Cute Mochi Characters"><label>Description</label><textarea id="description" placeholder="Cute Japanese mochi vector illustration..."></textarea><label>Keywords (через кому, до 50)</label><textarea id="keywords" placeholder="mochi, japanese, kawaii, dessert"></textarea><div class="muted" id="count">0 / 50</div><button type="button" id="dedupe" class="soft">Видалити повторювані Keywords</button><p class="muted">Залишає перше входження кожного слова, без урахування регістру.</p><button type="button" id="validate" class="soft">Перевірити метадані всіх EPS</button><div id="issues" class="issues" role="status"></div><div class="grid"><div><label>Author (XMP)</label><input id="author"></div><div><label>Copyright (XMP)</label><input id="copyright"></div><div><label>Country (CSV)</label><input id="country"></div><div><label>Color (CSV)</label><input id="color"></div></div></div></div></div><p class="notice">Імена EPS залишаються оригінальними. У CSV використано колонки твого шаблону Getty: file name, title, description, country, color, keywords.</p><button id="submit" type="submit">Створити ZIP із EPS та одним CSV</button></form><p id="status" role="status" class="muted">Файли тимчасово обробляються на сервері. Не завантажуй конфіденційні матеріали на публічний сайт.</p></main><script>
+const $=id=>document.getElementById(id);let files=[],entries=[],active=0,viewOnly=false,selectedTargets=new Set(),selectedFields=new Set(["title","description","keywords"]);const fields=['title','description','keywords','author','copyright','country','color'];let previewCache=new WeakMap(),previewToken=0,uploadBusy=false;
 function save(){if(!entries.length||viewOnly)return;for(const k of fields)entries[active][k]=$(k).value}
-function show(i){save();active=i;loadPreview(i);const e=entries[i];$('fileName').textContent=e.filename;$('metadataState').textContent=e._inspection||'Метадані введені вручну';for(const k of fields)$(k).value=e[k]||'';$('editor').hidden=false;renderList();renderCopy();count();applyViewMode()}
+function show(i){save();active=i;loadPreview(i);const e=entries[i];$('fileName').textContent=e.filename;$('metadataState').textContent=e._inspection||'Метадані введені вручну';for(const k of fields)$(k).value=e[k]||'';$('editor').hidden=false;renderList();renderCopy();count();applyViewMode();$("issues").textContent=""}
 async function loadPreview(i){
  const token=++previewToken, f=files[i],img=$('previewImage'),status=$('previewStatus');
  img.hidden=true;img.removeAttribute('src');status.textContent='Готую попередній перегляд…';
  if(!f){status.textContent='Файл не вибрано';return}
- if(previewCache.has(f)){img.src=previewCache.get(f);img.hidden=false;status.textContent='';return}
+ if(previewCache.has(f)){img.src=previewCache.get(f);img.hidden=false;status.textContent='';renderGallery();return}
  try{
   const fd=new FormData();fd.append('file',f,f.name);
   const response=await fetch('/preview',{method:'POST',body:fd});
   if(!response.ok){let msg;try{msg=(await response.json()).error}catch(e){}throw Error(msg||'Помилка перегляду')}
   const blob=await response.blob();if(token!==previewToken)return;
-  const url=URL.createObjectURL(blob);previewCache.set(f,url);img.src=url;img.hidden=false;status.textContent='';
+  const url=URL.createObjectURL(blob);previewCache.set(f,url);img.src=url;img.hidden=false;status.textContent='';renderGallery();
  }catch(e){if(token===previewToken){status.textContent='Перегляд недоступний: '+e.message;img.hidden=true}}
 }
-function renderList(){$('filelist').replaceChildren();entries.forEach((e,i)=>{const b=document.createElement('button');b.type='button';b.className='item'+(i===active?' active':'');b.textContent=(i+1)+'. '+e.filename;b.onclick=()=>show(i);$('filelist').append(b)})}
+function renderGallery(){
+ const gallery=$('gallery');gallery.replaceChildren();
+ entries.forEach((e,i)=>{
+  const b=document.createElement('button');b.type='button';b.className=i===active?'active':'';
+  const f=files[i];
+  if(previewCache.has(f)){const img=document.createElement('img');img.src=previewCache.get(f);img.alt=e.filename;b.append(img)}
+  else{const p=document.createElement('div');p.className='muted';p.textContent='EPS';p.style.padding='27px 0';b.append(p)}
+  const label=document.createElement('small');label.textContent=e.filename;b.append(label);b.onclick=()=>show(i);gallery.append(b);
+ });
+}
+function renderList(){$('filelist').replaceChildren();entries.forEach((e,i)=>{const b=document.createElement('button');b.type='button';b.className='item'+(i===active?' active':'');b.textContent=(i+1)+'. '+e.filename;b.onclick=()=>show(i);$('filelist').append(b)});renderGallery()}
+function keywordParts(value){return String(value||'').split(/[,\n;]+/).map(x=>x.trim()).filter(Boolean)}
+function dedupeKeywords(value){
+ const seen=new Set(),unique=[];
+ for(const word of keywordParts(value)){
+  const key=word.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ');
+  if(!seen.has(key)){seen.add(key);unique.push(word)}
+ }
+ return unique;
+}
+$('dedupe').onclick=()=>{
+ if(!entries.length)return;
+ if(viewOnly){$('issues').textContent='Перейди до режиму редагування, щоб змінити Keywords.';return}
+ const before=keywordParts($('keywords').value),after=dedupeKeywords($('keywords').value);
+ $('keywords').value=after.join(', ');save();count();
+ $('issues').textContent='Прибрано повторів: '+(before.length-after.length)+'. Залишено '+after.length+' ключових слів.';
+};
+$('validate').onclick=()=>{
+ if(!entries.length)return;save();
+ const problems=[];
+ entries.forEach(e=>{
+  const words=keywordParts(e.keywords),keys=words.map(x=>x.normalize('NFKC').toLocaleLowerCase());
+  const duplicates=words.filter((x,i)=>keys.indexOf(keys[i])!==i);
+  const issues=[];
+  if(!e.title.trim())issues.push('немає Title');
+  if(!e.description.trim())issues.push('немає Description');
+  if(!words.length)issues.push('немає Keywords');
+  if(words.length>50)issues.push('Keywords: '+words.length+' (понад 50)');
+  if(duplicates.length)issues.push('повтори: '+[...new Set(duplicates)].join(', '));
+  if(words.some(x=>/\s/.test(x)))issues.push('є ключові фрази з пробілами');
+  if(issues.length)problems.push(e.filename+': '+issues.join('; '));
+ });
+ $('issues').textContent=problems.length?problems.join('\n'):'Перевірку пройдено: зауважень не знайдено.';
+};
 function count(){$('count').textContent=$('keywords').value.split(/[,\n]/).filter(x=>x.trim()).length+' / 50'}$('keywords').oninput=count;
 function applyViewMode(){for(const k of fields)$(k).disabled=viewOnly;$('editor').classList.toggle('readonly',viewOnly);$('viewOnly').textContent=viewOnly?'Редагувати метадані':'Переглянути метадані';$('viewOnly').setAttribute('aria-pressed',String(viewOnly));$('viewHint').hidden=!viewOnly}
 $('viewOnly').onclick=()=>{if(!viewOnly)save();viewOnly=!viewOnly;applyViewMode()};
-$('removeFile').onclick=()=>{if(!entries.length)return;const name=entries[active].filename;if(!confirm('Прибрати «'+name+'» зі списку? Оригінальний файл на твоєму пристрої залишиться без змін.'))return;const idx=active;if(previewCache.has(files[idx])){URL.revokeObjectURL(previewCache.get(files[idx]));previewCache.delete(files[idx])}entries.splice(idx,1);files.splice(idx,1);selectedTargets=new Set([...selectedTargets].filter(i=>i!==idx).map(i=>i>idx?i-1:i));viewOnly=false;if(!entries.length){active=0;$('editor').hidden=true;$('filelist').textContent='Немає файлів';$('status').textContent='Усі файли прибрано зі списку.';return}active=Math.min(idx,entries.length-1);show(active);$('status').textContent='Файл «'+name+'» прибрано зі списку. На пристрої він не видалений.'};
+$('removeFile').onclick=()=>{if(!entries.length)return;const name=entries[active].filename;if(!confirm('Прибрати «'+name+'» зі списку? Оригінальний файл на твоєму пристрої залишиться без змін.'))return;const idx=active;if(previewCache.has(files[idx])){URL.revokeObjectURL(previewCache.get(files[idx]));previewCache.delete(files[idx])}entries.splice(idx,1);files.splice(idx,1);selectedTargets=new Set([...selectedTargets].filter(i=>i!==idx).map(i=>i>idx?i-1:i));viewOnly=false;if(!entries.length){active=0;renderGallery();$('editor').hidden=true;$('filelist').textContent='Немає файлів';$('status').textContent='Усі файли прибрано зі списку.';return}active=Math.min(idx,entries.length-1);show(active);$('status').textContent='Файл «'+name+'» прибрано зі списку. На пристрої він не видалений.'};
 const fieldLabels={title:'Title',description:'Description',keywords:'Keywords',author:'Author',copyright:'Copyright',country:'Country',color:'Color'};
 function renderCopy(){
  const t=$('copyTargets');t.replaceChildren();
@@ -33,17 +76,33 @@ $('selectTargets').onclick=()=>{entries.forEach((_,i)=>{if(i!==active)selectedTa
 $('clearTargets').onclick=()=>{selectedTargets.clear();renderCopy()};
 function xmpField(meta,name){const v=meta['XMP-dc:'+name];if(Array.isArray(v))return v.join(', ');if(v&&typeof v==='object')return v['x-default']||Object.values(v)[0]||'';return typeof v==='string'?v:''}
 $('files').onchange=async()=>{
- for(const old of files){if(previewCache.has(old))URL.revokeObjectURL(previewCache.get(old))}previewCache=new WeakMap();files=Array.from($('files').files);if(files.length>20){$('status').textContent='Максимум 20 файлів';files=[];return}
- const names=new Set();if(files.some(f=>{const n=f.name.toLowerCase();if(!n.endsWith('.eps')||names.has(n))return true;names.add(n);return false})){ $('status').textContent='Дозволено лише EPS з унікальними назвами';files=[];return}
- viewOnly=false;entries=files.map(f=>({filename:f.name,title:'',description:'',keywords:'',author:'',copyright:'',country:'',color:'',_inspection:'Очікує перевірки'}));selectedTargets.clear();active=0;
- if(entries.length)show(0);else{$('editor').hidden=true;$('filelist').textContent='Немає файлів'}
- $('status').textContent='Зчитую наявні XMP-метадані з '+files.length+' EPS…';
- for(let i=0;i<files.length;i++){
-  try{const fd=new FormData();fd.append('file',files[i],files[i].name);const response=await fetch('/inspect',{method:'POST',body:fd});const result=await response.json();if(!response.ok)throw Error(result.error||'Помилка');
-   const m=result.metadata||{};entries[i].title=xmpField(m,'Title');entries[i].description=xmpField(m,'Description');entries[i].keywords=xmpField(m,'Subject');entries[i].author=xmpField(m,'Creator');entries[i].copyright=xmpField(m,'Rights');entries[i]._inspection=m.error?'Помилка читання: '+m.error:(m._found_fields||[]).length?'Знайдено метадані: '+m._found_fields.join(', '):'У цьому EPS не знайдено доступних метаданих. Дані з CSV стоку не зберігаються автоматично всередині EPS.';
-  }catch(err){entries[i]._inspection='Помилка читання: '+err.message;$('status').textContent+='\nНе вдалося зчитати '+files[i].name+': '+err.message}
- }
- if(entries.length)show(active);$('status').textContent='Перевірено '+files.length+' EPS. Обери файл і подивись результат перевірки над полями.';
+ if(uploadBusy)return;
+ const input=$('files'), incoming=Array.from(input.files);input.value='';
+ if(!incoming.length)return;
+ save(); // preserve the currently edited fields before appending anything
+ if(files.length+incoming.length>20){$('status').textContent='Максимум 20 EPS у групі. Зараз '+files.length+', нових '+incoming.length+'.';return}
+ const known=new Set(files.map(f=>f.name.toLowerCase()));
+ for(const f of incoming){const n=f.name.toLowerCase();if(!n.endsWith('.eps')||known.has(n)){$('status').textContent='EPS має мати унікальну назву: '+f.name;return}known.add(n)}
+ uploadBusy=true;input.disabled=true;
+ const wasEmpty=entries.length===0, oldActive=active;
+ $('status').textContent='Додаю '+incoming.length+' EPS до групи…';
+ const added=[];
+ try{
+  for(const f of incoming){
+   const fd=new FormData();fd.append('file',f,f.name);
+   let result,inspection;
+   try{
+    const response=await fetch('/inspect',{method:'POST',body:fd});result=await response.json();
+    if(!response.ok)throw Error(result.error||'Помилка читання');
+   }catch(err){result={metadata:{}};inspection='Помилка читання: '+err.message}
+   const m=result.metadata||{};
+   const entry={filename:f.name,title:xmpField(m,'Title'),description:xmpField(m,'Description'),keywords:xmpField(m,'Subject'),author:xmpField(m,'Creator'),copyright:xmpField(m,'Rights'),country:'',color:'',_inspection:inspection||(m.error?'Помилка читання: '+m.error:(m._found_fields||[]).length?'Знайдено метадані: '+m._found_fields.join(', '):'У цьому EPS не знайдено доступних метаданих.')};
+   files.push(f);entries.push(entry);added.push(f.name);
+  }
+  if(wasEmpty){active=0;viewOnly=false;show(0)}
+  else{active=oldActive;renderList();renderCopy();}
+  $('status').textContent='Додано '+added.length+' EPS. У групі тепер '+files.length+' файлів. Попередні метадані збережені.';
+ }finally{uploadBusy=false;input.disabled=false}
 };
 $('copy').onclick=()=>{
  if(!entries.length)return;save();const mode=document.querySelector('input[name="copyMode"]:checked').value;
